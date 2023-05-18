@@ -8,15 +8,17 @@ import "core:bytes"
 
 main :: proc() {
 	
-	cmd_args := os.args[1:]
+	cmd_args := os.args[1:] //get an array of strings of args (excluded arg 0 which is exe path)
 	num_args := len(cmd_args)
 
-	fd_in, fd_out: os.Handle
-	fd_out = os.stdout
-	data: [] byte 
-	out_buf: [dynamic] byte
-	defer {
-		delete(data)
+	fd_in, fd_out: os.Handle // input and output file decripters of Handle type
+	fd_out = os.stdout // output Handle is always stdout for this app
+	in_buf: [] byte // input buffer to hold text read from stdin or file
+	out_buf: [dynamic] byte // output buffer to fill with matches and output to stdout 
+
+
+	defer { //delete at end of scope
+		delete(in_buf)
 		delete(out_buf)
 	}
 
@@ -32,7 +34,7 @@ main :: proc() {
 	}
 
 
-
+	// use stdin as Handle unless filename is provided
 	if fname != "" {
 		err:os.Errno
 		fd_in,err = os.open(fname,os.O_RDONLY) 
@@ -44,16 +46,17 @@ main :: proc() {
 		fd_in = os.stdin		
 	}
 
-	data,read_ok = os.read_entire_file(fd_in,context.allocator)
+	//fill input buffer from ether stdin or file
+	in_buf,read_ok = os.read_entire_file(fd_in,context.allocator)
 	if !read_ok {
 		fmt.println("Read Error, aborting")
 		return //bail out
 	}
 	
-	
-	
-	out_buf = grep(data,search)
+	//fill output buffer with matched lines with highlighted searches 
+	out_buf = grep(in_buf,search)
 
+	//write output buffer to stdout
 	for char in out_buf{
 		os.write_byte(fd_out, cast(byte)char)
 	}
@@ -72,24 +75,26 @@ main :: proc() {
 
 grep :: proc (data: []byte, search: string) -> (out_buf: [dynamic]byte){
 
-
-	line_buf := make( [dynamic]byte, 0 , 1000)
+	
+	match: bool = false
+	in_line := make([dynamic]byte, 0, 1000)
 	ret_line := make([dynamic]byte, 0, 1000)	
 	defer {
-		delete(line_buf)
+		delete(in_line)
 		delete(ret_line)
 	}
-	match: bool = false
-	line_idx := 0
+
 	for dat in data {
 		
+		//fill buffer with current line
 		if dat != '\n'{
-			append(&line_buf,dat)
+			append(&in_line,dat)
 		}
 		else
 		{
-
-			ret_line, match = line_grep(line_buf,search)
+			//line finished, process it for a match
+			ret_line, match = line_grep(in_line,search)
+			//if a match, add line (including colour highlighting) to the output buffer
 			if match {
 				for letter in ret_line { 
 					append(&out_buf, letter)
@@ -97,39 +102,47 @@ grep :: proc (data: []byte, search: string) -> (out_buf: [dynamic]byte){
 				append(&out_buf, '\n') // add line feed back in to buffer.
 				match = false
 			}
-			 
-			delete_dynamic_array(line_buf) //clear out old line and ret buffers
+			//clear out old line and ret buffers
+			delete_dynamic_array(in_line) 
 			delete_dynamic_array(ret_line)
-			line_buf = make( [dynamic]byte, 0 , 1000) //re-create them for next go around
+			//re-create them for next go around
+			in_line = make([dynamic]byte, 0, 1000) 
 			ret_line = make([dynamic]byte, 0, 1000)
 		}
-
 		
 	}
 
 	return
 }
+/*
+ line_grep:
+	takes a dynamic buffer containg a line and search query as a string.
 
-//@private
+	returns a dynamic buffer containing the line with any matches highlighted 
+			and a boolean to indicate a successful match
+
+	TODO: Has a bug where if a letter repeats in a search term, the whole \
+	TODO: rest of the line is highlighted
+
+*/
+@private
 line_grep :: proc (data: [dynamic]byte, search: string) -> (out_buf: [dynamic]byte, ret_match: bool){
 
 	sch_idx: int = 0
-	out_buf_idx: int = 0
 	match := false
 	ret_match = false
 	
 	for dat,dat_idx in data {
-		if data[dat_idx] == search[0] { //match 1st char
+		if data[dat_idx] == search[0] { //we matched 1st char of search
 			for letter, idx in search
 			{
 				if cast(byte)letter == data[dat_idx + idx] { //lookahead the length of the search string to see if an exact match
 					match = true //keep matching chars
 				}
 				else {
-					match = false //doesn't match full search string, want to exit look ahead
+					match = false //doesn't match full search string
+					break // want to exit look ahead
 				}
-
-				if(!match) {break} // no point continuing to check letters: bail out of for loop since match is a bust
 			}
 		} 
 		
@@ -138,34 +151,32 @@ line_grep :: proc (data: [dynamic]byte, search: string) -> (out_buf: [dynamic]by
 			ret_match = true
 			if (len(search) == 1) //special case for single char search
 			{
-				append(&out_buf, ANSI_PUR)
-				append(&out_buf, data[dat_idx])
-				append(&out_buf, ANSI_RST)
-				out_buf_idx += 3
+				append(&out_buf, ANSI_PUR) //start colour
+				append(&out_buf, data[dat_idx]) 
+				append(&out_buf, ANSI_RST) //end colour
 				match = false
 			} 
 			else if sch_idx < len(search) - 1 // haven't got to last char of match yet
 			{
 				if sch_idx == 0 { 
 					append(&out_buf, ANSI_PUR) 
-					out_buf_idx += 1
 				}
 				append(&out_buf, data[dat_idx])
-				out_buf_idx += 1
 				sch_idx += 1
-			} else {
+			} 
+			else 
+			{
 				append(&out_buf, data[dat_idx]) //last char of match
 				append(&out_buf, ANSI_RST) //turn off colour
-				out_buf_idx += 2
-				sch_idx = 0
 				match = false // back to normal processing
+				sch_idx = 0
 			}
-		} else { 
+		} 
+		else { //process non-coloured text
 			append(&out_buf, data[dat_idx])
-			out_buf_idx += 1
 		}
 
-	}
+	} //end of for loop for processing input line buffer
 	return
 }
 
