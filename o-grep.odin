@@ -110,19 +110,17 @@ grep :: proc (data: []byte, search: string) -> (out_buf: [dynamic]byte){
 			ret_line = make([dynamic]byte, 0, 1000)
 		}
 		
-	}
+	} //end of for dat in data
 
 	return
-}
+} //end of proc grep
+
 /*
  line_grep:
 	takes a dynamic buffer containg a line and search query as a string.
 
 	returns a dynamic buffer containing the line with any matches highlighted 
 			and a boolean to indicate a successful match
-
-	TODO: Has a bug where if a letter repeats in a search term, the whole \
-	TODO: rest of the line is highlighted
 
 */
 @private
@@ -133,7 +131,7 @@ line_grep :: proc (data: [dynamic]byte, search: string) -> (out_buf: [dynamic]by
 	ret_match = false
 	
 	for dat,dat_idx in data {
-		if data[dat_idx] == search[0] { //we matched 1st char of search
+		if data[dat_idx] == search[0] && !match { // no existing match and we've matched 1st char of search
 			for letter, idx in search
 			{
 				if cast(byte)letter == data[dat_idx + idx] { //lookahead the length of the search string to see if an exact match
@@ -141,9 +139,9 @@ line_grep :: proc (data: [dynamic]byte, search: string) -> (out_buf: [dynamic]by
 				}
 				else {
 					match = false //doesn't match full search string
-					break // want to exit look ahead
+					break // want to exit look ahead for loop
 				}
-			}
+			} //end of look ahead for loop
 		} 
 		
 		//colour highlighting logic (uses ANSI terminal codes) for fancy output
@@ -171,14 +169,15 @@ line_grep :: proc (data: [dynamic]byte, search: string) -> (out_buf: [dynamic]by
 				match = false // back to normal processing
 				sch_idx = 0
 			}
-		} 
+		} // end of if match
 		else { //process non-coloured text
 			append(&out_buf, data[dat_idx])
 		}
 
 	} //end of for loop for processing input line buffer
+
 	return
-}
+} // end of proc line_grep
 
 
 /*
@@ -195,9 +194,6 @@ Returns:
 cmd_line_parser :: proc(cmd_args: []string) -> (search: string, fname: string){
 	
 	search_arg,file_arg: bool = false, false
-	s := make([]byte,100)
-	//defer delete(s)
-	f : string
 
 	for arg in cmd_args {
 		switch(arg)
@@ -211,13 +207,13 @@ cmd_line_parser :: proc(cmd_args: []string) -> (search: string, fname: string){
 					//fmt.println("search term:",search)
 				} else if file_arg { //last arg was -f, so this arg is "filename"
 					file_arg = false
-					f    = arg
+					fname    = arg
 				}
 			}
 		}
 	}
 
-	return search, f
+	return 
 
 } 
 
