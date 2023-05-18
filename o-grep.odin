@@ -3,8 +3,7 @@ package main
 //core libraries
 import "core:fmt"
 import "core:os"
-import "core:strings"
-import "core:bytes"
+
 
 main :: proc() {
 	
