@@ -1,3 +1,13 @@
+/*
+Usage:
+        o_grep -e "search term" -f filename.txt
+or:
+        o_grep -e "search term" < filename.txt
+
+TODO: Add -i option for case insensitive
+
+*/
+
 package main
 
 //core libraries
